@@ -1,12 +1,14 @@
+// routes/authRoute.js
 import express from 'express';
 import { signupValidator, loginValidator } from '../utils/validator/authValidator.js';
-import { signup, login, forgetPassword, resetPassword } from '../controller/authController.js';
+import authController from '../controller/authController.js';
 
 const router = express.Router();
 
-router.post('/signup', signupValidator, signup);
-router.post('/login', loginValidator, login);
-router.post('/forgetPassword', forgetPassword);
-router.patch('/resetPassword/:token', resetPassword);
+router.post('/signup', signupValidator, authController.signup);
+router.post('/login', loginValidator, authController.login);
+router.post('/forgetPassword', authController.forgetPassword);
+router.patch('/resetPassword/:token', authController.resetPassword);
+router.get('/verifyEmail/:token', authController.verifyEmail);
 
 export default router;

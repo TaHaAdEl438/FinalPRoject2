@@ -1,3 +1,4 @@
+// models/userModel.js
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -20,7 +21,6 @@ const userSchema = new mongoose.Schema(
     },
     phone: String,
     profileImg: String,
-
     password: {
       type: String,
       required: [true, 'password required'],
@@ -35,15 +35,19 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    passwordResetToken: String, // تمت إضافة هذا الحقل
-    passwordResetExpires: Date, // تمت إضافة هذا الحقل
+    passwordResetToken: String,
+    passwordResetExpires: Date,
+    emailVerificationToken: String,
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-  // Hashing user password
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });

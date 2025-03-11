@@ -1,12 +1,13 @@
 {
   "name": "university",
   "version": "1.0.0",
-  "description": "",
+  "description": "Final Project for University",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "author": "",
   "license": "ISC",
@@ -22,9 +23,19 @@
     "mongoose": "^8.10.1",
     "morgan": "^1.10.0",
     "nodemailer": "^6.10.0",
-    "slugify": "^1.6.6"
+    "slugify": "^1.6.6",
+    "twilio": "^5.4.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TaHaAdEl438/FinalPRoject2.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/TaHaAdEl438/FinalPRoject2/issues"
+  },
+  "homepage": "https://github.com/TaHaAdEl438/FinalPRoject2#readme"
 }

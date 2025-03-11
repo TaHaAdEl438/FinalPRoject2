@@ -1,20 +1,19 @@
+// server.js
 import express from "express";
 import morgan from "morgan";
 import ApiError from "./utils/apiError.js";
-import dbConnection from "./config/database..js";
 import globalError from "./middlewares/errorMiddleware.js";
 import cors from "cors";
 import categoryRoute from "./routes/categoryRoute.js";
 import authRoute from "./routes/authRoute.js";
-import dotenv from 'dotenv'
+import dotenv from 'dotenv';
+import dbConnection from "./config/database.js";
 
 const app = express();
 
 app.use(express.json());
 
-// Load environment variables
-
-dotenv.config()
+dotenv.config({ path: './config.env' });
 
 app.use(
   cors({
@@ -31,7 +30,6 @@ if (!process.env.MONGO_URI) {
 
 console.log("MONGO_URI:", process.env.MONGO_URI);
 
-// Connect with database
 dbConnection();
 
 if (process.env.NODE_ENV === "development") {
@@ -51,7 +49,6 @@ app.use(globalError);
 const PORT = process.env.PORT || 8000;
 const server = app.listen(PORT, () => {
   console.log(`App running on port ${PORT}`);
-  console.log("what you will do?");
 });
 
 process.on("unhandledRejection", (err) => {

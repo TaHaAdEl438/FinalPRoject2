@@ -1,48 +1,84 @@
+// controller/authController.js
 import jwt from 'jsonwebtoken';
 import asyncHandler from 'express-async-handler';
 import ApiError from '../utils/apiError.js';
 import User from '../models/userModel.js';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto'; // لإنتاج رمز عشوائي
-import sendEmail from '../utils/sendEmail.js'; // لإرسال البريد الإلكتروني
+import crypto from 'crypto';
+import sendEmail from '../utils/sendEmail.js';
+import twilio from 'twilio';
 
-// Generate token
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
 const createToken = (payload) =>
   jwt.sign({ userId: payload }, process.env.JWT_SECRET_KEY, {
     expiresIn: process.env.JWT_SECRET_TIME,
   });
 
-// @desc  Signup
-// @route POST /api/v1/auth/signup
-// @access Public
 export const signup = asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.body;
 
-  // التحقق من إدخال جميع البيانات المطلوبة
   if (!name || !email || !password) {
     return next(new ApiError('Please provide name, email, and password.', 400));
   }
 
-  // التحقق مما إذا كان البريد الإلكتروني مستخدمًا مسبقًا
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     return next(new ApiError('E-mail already in use', 400));
   }
 
-  // 1- إنشاء المستخدم
-  const user = await User.create({ name, email, password }).catch(err => {
+  const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+  const user = await User.create({
+    name,
+    email,
+    password,
+    emailVerificationToken,
+  }).catch((err) => {
     return next(new ApiError(err.message, 500));
   });
 
-  // 2- إنشاء التوكن
-  const token = createToken(user._id);
+  const verificationURL = `${req.protocol}://${req.get('host')}/api/v1/auth/verifyEmail/${emailVerificationToken}`;
+  const message = `Please verify your email by clicking this link: ${verificationURL}.\nThis link is valid for 24 hours.`;
 
-  res.status(201).json({ data: user, token });
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'Email Verification (Valid for 24 hours)',
+      message,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'User created. Please verify your email to log in.',
+      data: user,
+    });
+  } catch (err) {
+    await User.deleteOne({ _id: user._id });
+    return next(new ApiError('Error sending verification email. Try again later.', 500));
+  }
 });
 
-// @desc  Login
-// @route POST /api/v1/auth/login
-// @access Public
+export const verifyEmail = asyncHandler(async (req, res, next) => {
+  const { token } = req.params;
+
+  const user = await User.findOne({ emailVerificationToken: token });
+  if (!user) {
+    return next(new ApiError('Invalid or expired verification token.', 400));
+  }
+
+  user.emailVerified = true;
+  user.emailVerificationToken = undefined;
+  await user.save();
+
+  const tokenJwt = createToken(user._id);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Email verified successfully!',
+    token: tokenJwt,
+  });
+});
+
 export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
@@ -50,10 +86,9 @@ export const login = asyncHandler(async (req, res, next) => {
     return next(new ApiError('Please provide email and password.', 400));
   }
 
-  // البحث عن المستخدم مع تضمين كلمة المرور
-  const user = await User.findOne({ email }).select('password');
-  if (!user) {
-    return next(new ApiError('Incorrect email or password!', 401));
+  const user = await User.findOne({ email }).select('password emailVerified');
+  if (!user || !user.emailVerified) {
+    return next(new ApiError('Please verify your email before logging in.', 401));
   }
 
   const isMatch = await bcrypt.compare(password, user.password);
@@ -64,7 +99,7 @@ export const login = asyncHandler(async (req, res, next) => {
   const token = createToken(user._id);
 
   res.status(200).json({
-    message: "Login successful",
+    message: 'Login successful',
     data: {
       _id: user._id,
       name: user.name,
@@ -74,30 +109,24 @@ export const login = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc  Protect routes
-// @access Private
 export const protect = asyncHandler(async (req, res, next) => {
-  // 1) check if token exist , if exist get it
   let token;
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer')
   ) {
-    token = req.headers.authorization.split(' ')[1]; // تم تصحيح الخطأ هنا (إضافة مسافة في split)
+    token = req.headers.authorization.split(' ')[1];
   }
   if (!token) {
     return next(
       new ApiError(
-        'You are not login , Please login to get access to this route',
+        'You are not logged in. Please log in to get access to this route.',
         401
       )
     );
   }
 
-  // 2) Verify token (no change happen ,expire token)
   const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-
-  // 3) Check if user still exists
   const currentUser = await User.findById(decoded.userId);
   if (!currentUser) {
     return next(
@@ -105,61 +134,74 @@ export const protect = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // 4) Grant access to the route
   req.user = currentUser;
   next();
 });
 
-// @desc  Forget Password
-// @route POST /api/v1/auth/forgetPassword
-// @access Public
 export const forgetPassword = asyncHandler(async (req, res, next) => {
-  const { email } = req.body;
+  const { email, phone, resetVia } = req.body;
 
-  if (!email) {
-    return next(new ApiError('Please provide your email.', 400));
+  if (!email && !phone) {
+    return next(new ApiError('Please provide your email or phone number.', 400));
   }
 
-  const user = await User.findOne({ email });
+  const user = email ? await User.findOne({ email }) : await User.findOne({ phone });
   if (!user) {
-    return next(new ApiError('No user found with this email.', 404));
+    return next(new ApiError('No user found with this email or phone.', 404));
   }
 
-  // إنشاء رمز إعادة تعيين كلمة المرور
   const resetToken = crypto.randomBytes(32).toString('hex');
   user.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-  user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 دقائق
+  user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
 
   await user.save({ validateBeforeSave: false });
 
-  // إرسال البريد الإلكتروني
-  const resetURL = `${req.protocol}://${req.get('host')}/api/v1/auth/resetPassword/${resetToken}`;
+  if (resetVia === 'phone' && user.phone) {
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.passwordResetToken = crypto.createHash('sha256').update(resetCode).digest('hex');
 
-  const message = `Forgot your password? Submit a PATCH request with your new password to: ${resetURL}.\nIf you didn't forget your password, please ignore this email!`;
+    try {
+      await twilioClient.messages.create({
+        body: `Your password reset code is: ${resetCode}. Valid for 10 minutes.`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: user.phone,
+      });
 
-  try {
-    await sendEmail({
-      email: user.email,
-      subject: 'Your password reset token (valid for 10 min)',
-      message,
-    });
+      await user.save({ validateBeforeSave: false });
+      res.status(200).json({
+        status: 'success',
+        message: 'Reset code sent to phone!',
+      });
+    } catch (err) {
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+      return next(new ApiError('Error sending SMS. Try again later.', 500));
+    }
+  } else {
+    const resetURL = `${req.protocol}://${req.get('host')}/api/v1/auth/resetPassword/${resetToken}`;
+    const message = `Forgot your password? Submit a PATCH request with your new password to: ${resetURL}.\nIf you didn't forget your password, please ignore this email!`;
 
-    res.status(200).json({
-      status: 'success',
-      message: 'Token sent to email!',
-    });
-  } catch (err) {
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save({ validateBeforeSave: false });
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Your password reset token (valid for 10 min)',
+        message,
+      });
 
-    return next(new ApiError('There was an error sending the email. Try again later!', 500));
+      res.status(200).json({
+        status: 'success',
+        message: 'Token sent to email!',
+      });
+    } catch (err) {
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+      return next(new ApiError('Error sending email. Try again later.', 500));
+    }
   }
 });
 
-// @desc  Reset Password
-// @route PATCH /api/v1/auth/resetPassword/:token
-// @access Public
 export const resetPassword = asyncHandler(async (req, res, next) => {
   const { token } = req.params;
   const { password, passwordConfirm } = req.body;
@@ -173,7 +215,6 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   }
 
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-
   const user = await User.findOne({
     passwordResetToken: hashedToken,
     passwordResetExpires: { $gt: Date.now() },
@@ -195,3 +236,12 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
     token: newToken,
   });
 });
+
+export default {
+  signup,
+  login,
+  protect,
+  forgetPassword,
+  resetPassword,
+  verifyEmail,
+};

@@ -1,3 +1,4 @@
+// utils/validator/authValidator.js
 import slugify from 'slugify';
 import { check } from 'express-validator';
 import validatorMiddleware from '../../middlewares/validatorMiddleware.js';
@@ -19,10 +20,29 @@ export const signupValidator = [
     .withMessage('Email required')
     .isEmail()
     .withMessage('Invalid email address')
+    .custom((val) => {
+      if (!val.endsWith('@gmail.com')) {
+        throw new Error('Only Gmail addresses are allowed');
+      }
+      return true;
+    })
     .custom((val) =>
       User.findOne({ email: val }).then((user) => {
         if (user) {
           return Promise.reject(new Error('E-mail already in use'));
+        }
+      })
+    ),
+
+  check('phone')
+    .notEmpty()
+    .withMessage('Phone number required')
+    .isMobilePhone('ar-EG')
+    .withMessage('Invalid Egyptian phone number')
+    .custom((val) =>
+      User.findOne({ phone: val }).then((user) => {
+        if (user) {
+          return Promise.reject(new Error('Phone number already in use'));
         }
       })
     ),
