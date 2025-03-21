@@ -20,7 +20,10 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
     },
     phone: String,
-    profileImg: String,
+    profileImg: {
+      type:String,
+      default: "https://res.cloudinary.com/dhddxcwcr/image/upload/v1700416252/6558f05c2841e64561ce75d1_Cover.jpg",
+    },
     password: {
       type: String,
       required: [true, 'password required'],
@@ -37,6 +40,9 @@ const userSchema = new mongoose.Schema(
     },
     passwordResetToken: String,
     passwordResetExpires: Date,
+    passwordResetVerified:Boolean,
+    
+    emailVerifiedExpired: Date,
     emailVerificationToken: String,
     emailVerified: {
       type: Boolean,

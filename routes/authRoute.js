@@ -10,5 +10,7 @@ router.post('/login', loginValidator, authController.login);
 router.post('/forgetPassword', authController.forgetPassword);
 router.patch('/resetPassword/:token', authController.resetPassword);
 router.get('/verifyEmail/:token', authController.verifyEmail);
+router.post('/send-again', authController.sendAgain);
+
 
 export default router;
