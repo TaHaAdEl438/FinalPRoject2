@@ -6,6 +6,7 @@ import globalError from "./middlewares/errorMiddleware.js";
 import cors from "cors";
 import categoryRoute from "./routes/categoryRoute.js";
 import authRoute from "./routes/authRoute.js";
+import userRoute from './routes/userRoute.js'
 import dotenv from 'dotenv';
 import dbConnection from "./config/database.js";
 
@@ -39,6 +40,7 @@ if (process.env.NODE_ENV === "development") {
 
 app.use("/api/v1/categories", categoryRoute);
 app.use("/api/v1/auth", authRoute);
+app.use("/api/v1/user", userRoute);
 
 app.all("*", (req, res, next) => {
   next(new ApiError(`Can't find this route: ${req.originalUrl}`, 400));
