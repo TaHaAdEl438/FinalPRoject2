@@ -26,11 +26,11 @@ export const resizePhotoProject = asyncHandler(async (req, res, next) => {
     if (!req.file) return next()
 
     const fileName = `${req.file.originalname}`
-    const filePath = `SignPR/Users`
+    const filePath = "SignPR/Users"
 
     const result = await uploadToCloudinary(req.file.buffer, fileName, filePath)
     req.body.profileImg = result.secure_url
-
+console.log(result.secure_url)
     next()
 })
 
@@ -44,6 +44,7 @@ const uploadToCloudinary = (buffer, filename ='', folderPath = '',options={}) =>
           resource_type: 'auto',
         },
         (error, result) => {
+          console.log(error, result)
           if (error) return reject(error);
           resolve(result);
         }
@@ -56,7 +57,7 @@ export const updateOne = asyncHandler(async (req, res, next) => {
     const doc = await User.findByIdAndUpdate(req.user.id, req.body, { new: true }) //new is true => to return new doc after update
 
     if (!doc) {
-        return next(new appError(`Can't find User on this id`, 404));
+        return next(new appError("Can't find User on this id", 404));
     }
 
     // doc.save()
@@ -69,8 +70,9 @@ export const updateOne = asyncHandler(async (req, res, next) => {
     })
 })
 
-export default {
+export default 
+{
     updateOne,
     resizePhotoProject,
     uploadPhoto
-  };
+  };
